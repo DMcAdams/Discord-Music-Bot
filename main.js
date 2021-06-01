@@ -56,10 +56,19 @@ client.on("message", function(message){
     //if pause command
     else if (message.content.toLowerCase().startsWith(`${prefix}pause`)){
         console.log('Pause');
+        pause(message);
+        pause(message);
+        message.channel.send(wrap("Music is paused"));
     }
     //if resume command
     else if (message.content.toLowerCase().startsWith(`${prefix}resume`)){
         console.log('Resume');
+        //This works and I dont know why
+        //dont remove the extra pause/resume or it breaks
+        resume(message);
+        pause(message);
+        resume(message);
+        message.channel.send(wrap("Music resumed"));
     }
     //if stop command
     else if (message.content.toLowerCase().startsWith(`${prefix}stop`)){
@@ -271,7 +280,34 @@ async function execute(message, serverQueue) {
 		});
 	}
 
+function pause(message){
+    const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == message.guild.id);
+    if (voiceConnection === null || voiceConnection === void 0){
+        message.channel.send(wrap("There is no music playing"));
+    }
+    else {
+        const dispatcher = voiceConnection.dispatcher;
+		if (!dispatcher.paused) dispatcher.pause();
+        //message.channel.send(wrap("Music is paused"));
+    }
 
+}
+
+function resume(message){
+    const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == message.guild.id);
+    if (voiceConnection === null || voiceConnection === void 0){
+        message.channel.send(wrap("There is no music playing"));
+    }
+    else {
+        const dispatcher = voiceConnection.dispatcher;
+		if (dispatcher.paused){ 
+            message.guild.me.voice.connection.dispatcher.resume()
+            //dispatcher.resume();
+            //message.channel.send(wrap("Music resumed"));
+        }
+    }
+
+}
 async function helpMe(message){
     message.channel.send(wrap("No."));
 }
