@@ -2,6 +2,7 @@
 //const { channel } = require('diagnostic_channel');
 const Discord = require('discord.js');
 const ytdl = require('ytdl-core');
+const youtubedl = require('youtube-dl-exec');
 //get auth data
 const { prefix, token } = require('./auth.json');
 
@@ -45,6 +46,7 @@ client.on("message", function(message){
     //if play command
     if (message.content.toLowerCase().startsWith(`${prefix}play`)){
         console.log('Play');
+        play(message)
     }
     //if pause command
     else if (message.content.toLowerCase().startsWith(`${prefix}pause`)){
@@ -69,10 +71,76 @@ client.on("message", function(message){
     }
 });
 
+async function play(message) {
+  
+    //check if user is in a voice channel
+    //const voiceChannel = message.member.voice.channel;
+    //if (!voiceChannel)
+      //eturn message.channel.send(
+      //  "You need to be in a voice channel to play music!"
+      //);
+
+    //check if bot has the proper permissions
+    //const permissions = voiceChannel.permissionsFor(message.client.user);
+    //if (!permissions.has("CONNECT") || !permissions.has("SPEAK")) {
+      //return message.channel.send(
+      //  "I need the permissions to join and speak in your voice channel!"
+      //);
+    //}
+
+    //used to differentiate between searches and URLs
+    var isUrl = true;
+
+    //remove prefix from command
+    var searchstring = message.content;
+    searchstring = trimPrefix(searchstring);
+    //if not a url
+    if (!searchstring.toLowerCase().startsWith('http')) {
+        searchstring = 'ytsearch1:' + searchstring;
+        isUrl = false;
+    }
+    console.log(`Search String: ${searchstring}`)
+ 
+    youtubedl(searchstring, {
+    dumpSingleJson: true,
+    noWarnings: true,
+    noCallHome: true,
+    noCheckCertificate: true,
+    preferFreeFormats: true,
+    youtubeSkipDashManifest: true,
+    referer: 'https://example.com'
+  })
+    .then((info) => {
+         console.log(info);
+         
+         //extract song info 
+         if (isUrl){
+            const song = {
+                title: info.title,
+                url: info.webpage_url
+            };
+            console.log(song);
+         }
+         else {
+            const song = {
+                title: info.entries[0].title,
+                url: info.entries[0].webpage_url
+            };
+            console.log(song);
+         }
+
+         //queue.push(info)
+        });
+    }
 
 
 async function helpMe(message){
     message.channel.send(wrap("No."));
+}
+
+function trimPrefix(str) {
+    const prefix = "!play ";
+    return str.slice(prefix.length)
 }
 
 function wrap(text){
