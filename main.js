@@ -12,7 +12,8 @@ const client = new Discord.Client();
 //holds queues for each server 
 const queue = new Map();
 
-const DEFAULT_VOLUME = 30
+const DEFAULT_VOLUME = 30;
+let currentVolume = 0;
 
 //log in to discord with bot token
 client.login(token);
@@ -64,11 +65,16 @@ client.on("message", function(message){
     else if (message.content.toLowerCase().startsWith(`${prefix}resume`)){
         console.log('Resume');
         //This works and I dont know why
-        //dont remove the extra pause/resume or it breaks
+        //just dont remove the extra pause/resume or it breaks
         resume(message);
         pause(message);
         resume(message);
         message.channel.send(wrap("Music resumed"));
+    }
+    //if skip command
+    else if (message.content.toLowerCase().startsWith(`${prefix}skip`)){
+        console.log('skip');
+        play(message, serverQueue);
     }
     //if stop command
     else if (message.content.toLowerCase().startsWith(`${prefix}stop`)){
@@ -82,6 +88,16 @@ client.on("message", function(message){
     else if (message.content.toLowerCase().startsWith(`${prefix}help`)){
         console.log('HALP ME');
         helpMe(message);
+    }
+    //if volume command
+    else if (message.content.toLowerCase().startsWith(`${prefix}volume`)){
+        console.log('volume');
+        volume(message, serverQueue);
+    }
+    //special command 
+    else if (message.content.toLowerCase().startsWith(`${prefix}noice`)){
+        message.content = "!play https://www.youtube.com/watch?v=a8c5wmeOL9o";
+        execute(message, serverQueue);
     }
 });
 
@@ -107,7 +123,7 @@ async function execute(message, serverQueue) {
 
     //remove prefix from command
     var searchstring = message.content;
-    searchstring = trimPrefix(searchstring);
+    searchstring = trimPrefix(searchstring, "!play ");
     //if not a url
     if (!searchstring.toLowerCase().startsWith('http')) {
         searchstring = 'ytsearch1:' + searchstring;
@@ -152,7 +168,7 @@ async function execute(message, serverQueue) {
               voiceChannel: voiceChannel,
               connection: null,
               songs: [],
-              volume: 10,
+              volume: DEFAULT_VOLUME,
               playing: true
             };
             
@@ -166,9 +182,12 @@ async function execute(message, serverQueue) {
         //if queue already exists just add the song
         else {
             serverQueue.songs.push(song);
-            message.channel.send(wrap("Added to queue: " + song.title));
-            if (serverQueue.songs.length == 1){
+            //only play if music is not currently playing 
+            if (!client.voice.connections.find(val => val.channel.guild.id === message.guild.id)){
                 play(message, serverQueue);
+            }
+            else {
+                message.channel.send(wrap("Added to queue: " + song.title));
             }
         }
         });
@@ -178,38 +197,18 @@ async function execute(message, serverQueue) {
 
     }
 
-    /*
-
-    function play(guild, song) {
-        const serverQueue = queue.get(guild.id);
-        if (!song) {
-          serverQueue.voiceChannel.leave();
-          queue.delete(guild.id);
-          return;
-        }
-      
-        const dispatcher = serverQueue.connection
-          .play(ytdl(song.url))
-          .on("finish", () => {
-            serverQueue.songs.shift();
-            play(guild, serverQueue.songs[0]);
-          })
-          .on("error", error => console.error(error));
-        dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
-        serverQueue.textChannel.send(`Start playing: **${song.title}**`);
-      }
-
- */
 
   function play(msg, serverQueue) {
 		// If the queue is empty, finish.
-		if (serverQueue.songs.length == 0) {
+        console.log(`Queue length: ${serverQueue.songs.length}`);
+		if (!serverQueue.songs.length) {
 			msg.channel.send(wrap('Playback finished.'));
 
 			// Leave the voice channel.
 			const voiceConnection = client.voice.connections.find(val => val.channel.guild.id === msg.guild.id);
             console.log(voiceConnection);
 			if (voiceConnection !== null) return voiceConnection.disconnect();
+
 		}
 
 		new Promise((resolve, reject) => {
@@ -244,29 +243,23 @@ async function execute(message, serverQueue) {
 
 			// Play the video.
 			msg.channel.send(wrap('Now Playing: ' + video.title)).then(() => {
-				let dispatcher = connection.play(ytdl(video.url , {filter: 'audioonly'}), {seek: 0, volume: (DEFAULT_VOLUME/100)});
-
+				let dispatcher = connection.play(ytdl(video.url , {filter: 'audioonly'}), {seek: 0, volume: (serverQueue.volume/100)});
+                //if error
 				connection.on('error', (error) => {
 					// Skip to the next song.
-					console.log(error);
-					//serverQueue.songs.shift();
 					play(msg, serverQueue);
 				});
-
+                //if error
 				dispatcher.on('error', (error) => {
 					// Skip to the next song.
-					console.log(error);
-					//serverQueue.songs.shift();
 					play(msg, serverQueue);
 				});
-
+                //when song is finished
 				dispatcher.on('finish', () => {
 					// Wait a second.
                     console.log(`song over`);
 					setTimeout(() => {
-						if (serverQueue.songs.length > 0) {
-							// Remove the song from the queue.
-							//serverQueue.songs.shift();
+						if (1) {
 							// Play the next song in the queue.
 							play(msg, serverQueue);
 						}
@@ -308,12 +301,46 @@ function resume(message){
     }
 
 }
+
+function volume(message, serverQueue){
+
+    //trim prefix, then attempt to parse it as an int
+    let nVolume = parseInt(trimPrefix(message.content, "!volume "));
+
+    console.log(`Volume: ${nVolume}`);
+
+    //if invalid number
+    if(!nVolume || nVolume < 0 || nVolume > 100){
+        message.channel.send(wrap("Please enter a valid number between 0 and 100"))
+        return;
+    }
+
+    //if bot is active in server
+    if (serverQueue){
+        serverQueue.volume = nVolume;
+    }
+    else {
+        message.channel.send(wrap("Error: please play a song first to set up the bot"));
+        return;
+    }
+    //if bot is playing music
+    const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == message.guild.id);
+    if (voiceConnection === null || voiceConnection === void 0){
+        console.log(`Volume: not in VC`);
+    }  
+    else {
+        //set current volume
+        voiceConnection.dispatcher.setVolume(nVolume/100);
+    }
+
+    message.channel.send(wrap("Volume updated."));
+}
 async function helpMe(message){
     message.channel.send(wrap("No."));
 }
 
-function trimPrefix(str) {
-    const prefix = "!play ";
+function trimPrefix(str, prefix) {
+    //const prefix = "!play ";
     return str.slice(prefix.length)
 }
 
