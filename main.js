@@ -41,12 +41,15 @@ client.on("ready", function(){
 
 //message sent on server, most of the important stuff starts here
 client.on("message", function(message){
-    console.log(`message is created -> ${message}`);
+    //console.log(`message is created -> ${message}`);
+    
+    //get queue for the user's server
+    const serverQueue = queue.get(message.guild.id)
 
     //if play command
     if (message.content.toLowerCase().startsWith(`${prefix}play`)){
         console.log('Play');
-        play(message)
+        execute(message, serverQueue)
     }
     //if pause command
     else if (message.content.toLowerCase().startsWith(`${prefix}pause`)){
@@ -71,22 +74,22 @@ client.on("message", function(message){
     }
 });
 
-async function play(message) {
+async function execute(message, serverQueue) {
   
     //check if user is in a voice channel
-    //const voiceChannel = message.member.voice.channel;
-    //if (!voiceChannel)
-      //eturn message.channel.send(
-      //  "You need to be in a voice channel to play music!"
-      //);
+    const voiceChannel = message.member.voice.channel;
+    if (!voiceChannel)
+      return message.channel.send(
+        "You need to be in a voice channel to play music!"
+      );
 
     //check if bot has the proper permissions
-    //const permissions = voiceChannel.permissionsFor(message.client.user);
-    //if (!permissions.has("CONNECT") || !permissions.has("SPEAK")) {
-      //return message.channel.send(
-      //  "I need the permissions to join and speak in your voice channel!"
-      //);
-    //}
+    const permissions = voiceChannel.permissionsFor(message.client.user);
+    if (!permissions.has("CONNECT") || !permissions.has("SPEAK")) {
+      return message.channel.send(
+        "I need the permissions to join and speak in your voice channel!"
+      );
+    }
 
     //used to differentiate between searches and URLs
     var isUrl = true;
@@ -101,6 +104,7 @@ async function play(message) {
     }
     console.log(`Search String: ${searchstring}`)
  
+    //search for a video
     youtubedl(searchstring, {
     dumpSingleJson: true,
     noWarnings: true,
@@ -110,29 +114,81 @@ async function play(message) {
     youtubeSkipDashManifest: true,
     referer: 'https://example.com'
   })
-    .then((info) => {
+    .then( async (info) => {
          console.log(info);
          
-         //extract song info 
+         //extract song info, formatting is different depending on wether a search string or URL is provided
          if (isUrl){
-            const song = {
+            var song = {
                 title: info.title,
                 url: info.webpage_url
             };
             console.log(song);
          }
          else {
-            const song = {
+            var song = {
                 title: info.entries[0].title,
                 url: info.entries[0].webpage_url
             };
             console.log(song);
          }
 
-         //queue.push(info)
+         //if no queue for the server
+         if (!serverQueue) {
+             //make a new one
+            const queueContruct = {
+              textChannel: message.channel,
+              voiceChannel: voiceChannel,
+              connection: null,
+              songs: [],
+              volume: 10,
+              playing: true
+            };
+            
+            //set the data
+            queue.set(message.guild.id, queueContruct);
+            //add the song
+            queueContruct.songs.push(song);
+        
+            //try to play song
+            try {
+              var connection = await voiceChannel.join();
+              queueContruct.connection = connection;
+              play(message.guild, queueContruct.songs[0]);
+            } catch (err) {
+              console.log(err);
+              queue.delete(message.guild.id);
+              return message.channel.send(err);
+            }
+          } 
+          
+          //else if already a server queue
+          else {
+            serverQueue.songs.push(song);
+            return message.channel.send(`${song.title} has been added to the queue!`);
+          }
+        
         });
     }
 
+    function play(guild, song) {
+        const serverQueue = queue.get(guild.id);
+        if (!song) {
+          serverQueue.voiceChannel.leave();
+          queue.delete(guild.id);
+          return;
+        }
+      
+        const dispatcher = serverQueue.connection
+          .play(ytdl(song.url))
+          .on("finish", () => {
+            serverQueue.songs.shift();
+            play(guild, serverQueue.songs[0]);
+          })
+          .on("error", error => console.error(error));
+        dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
+        serverQueue.textChannel.send(`Start playing: **${song.title}**`);
+      }
 
 async function helpMe(message){
     message.channel.send(wrap("No."));
