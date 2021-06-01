@@ -12,6 +12,8 @@ const client = new Discord.Client();
 //holds queues for each server 
 const queue = new Map();
 
+const DEFAULT_VOLUME = 30
+
 //log in to discord with bot token
 client.login(token);
 
@@ -149,27 +151,25 @@ async function execute(message, serverQueue) {
             queue.set(message.guild.id, queueContruct);
             //add the song
             queueContruct.songs.push(song);
-        
-            //try to play song
-            try {
-              var connection = await voiceChannel.join();
-              queueContruct.connection = connection;
-              play(message.guild, queueContruct.songs[0]);
-            } catch (err) {
-              console.log(err);
-              queue.delete(message.guild.id);
-              return message.channel.send(err);
-            }
-          } 
-          
-          //else if already a server queue
-          else {
+
+             play(message, queueContruct);
+        }
+        //if queue already exists just add the song
+        else {
             serverQueue.songs.push(song);
-            return message.channel.send(`${song.title} has been added to the queue!`);
-          }
-        
+            message.channel.send(wrap("Added to queue: " + song.title));
+            if (serverQueue.songs.length == 1){
+                play(message, serverQueue);
+            }
+        }
         });
+
+        
+
+
     }
+
+    /*
 
     function play(guild, song) {
         const serverQueue = queue.get(guild.id);
@@ -189,6 +189,88 @@ async function execute(message, serverQueue) {
         dispatcher.setVolumeLogarithmic(serverQueue.volume / 5);
         serverQueue.textChannel.send(`Start playing: **${song.title}**`);
       }
+
+ */
+
+  function play(msg, serverQueue) {
+		// If the queue is empty, finish.
+		if (serverQueue.songs.length == 0) {
+			msg.channel.send(wrap('Playback finished.'));
+
+			// Leave the voice channel.
+			const voiceConnection = client.voice.connections.find(val => val.channel.guild.id === msg.guild.id);
+            console.log(voiceConnection);
+			if (voiceConnection !== null) return voiceConnection.disconnect();
+		}
+
+		new Promise((resolve, reject) => {
+			// Join the voice channel if not already in one.
+			const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == msg.guild.id); //const voiceConnection = null;
+            console.log(voiceConnection);
+			if (voiceConnection === null || voiceConnection === void 0) {
+                //console.log(`voiceConnection is null!`);
+
+				// Check if the user is in a voice channel.
+                voiceChannel = msg.member.voice.channel
+				if (msg.member.voice.channel) {
+					msg.member.voice.channel.join().then(connection => {
+                        console.log("Connected to Voice Channel");
+						resolve(connection);
+					}).catch((error) => {
+						console.log(error);
+					});
+				} else {
+					// Otherwise, clear the queue and do nothing.
+					serverQueue.songs.splice(0, serverQueue.songs.length);
+                    console.log("Failed to join voice channel");
+					reject();
+				}
+			} else {
+				resolve(voiceConnection);
+			}
+		}).then(connection => {
+			// Get the first item in the queue.
+			const video = serverQueue.songs.pop();
+			//console.log(video.url);
+
+			// Play the video.
+			msg.channel.send(wrap('Now Playing: ' + video.title)).then(() => {
+				let dispatcher = connection.play(ytdl(video.url , {filter: 'audioonly'}), {seek: 0, volume: (DEFAULT_VOLUME/100)});
+
+				connection.on('error', (error) => {
+					// Skip to the next song.
+					console.log(error);
+					//serverQueue.songs.shift();
+					play(msg, serverQueue);
+				});
+
+				dispatcher.on('error', (error) => {
+					// Skip to the next song.
+					console.log(error);
+					//serverQueue.songs.shift();
+					play(msg, serverQueue);
+				});
+
+				dispatcher.on('finish', () => {
+					// Wait a second.
+                    console.log(`song over`);
+					setTimeout(() => {
+						if (serverQueue.songs.length > 0) {
+							// Remove the song from the queue.
+							//serverQueue.songs.shift();
+							// Play the next song in the queue.
+							play(msg, serverQueue);
+						}
+					}, 100);
+				});
+			}).catch((error) => {
+				console.log(error);
+			});
+		}).catch((error) => {
+			console.log(error);
+		});
+	}
+
 
 async function helpMe(message){
     message.channel.send(wrap("No."));
