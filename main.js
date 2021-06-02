@@ -1,5 +1,4 @@
 //required packages
-//const { channel } = require('diagnostic_channel');
 const Discord = require('discord.js');
 const ytdl = require('ytdl-core');
 const youtubedl = require('youtube-dl-exec');
@@ -214,7 +213,7 @@ async function execute(message, serverQueue) {
 		new Promise((resolve, reject) => {
 			// Join the voice channel if not already in one.
 			const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == msg.guild.id); //const voiceConnection = null;
-            console.log(voiceConnection);
+            //console.log(voiceConnection);
 			if (voiceConnection === null || voiceConnection === void 0) {
                 //console.log(`voiceConnection is null!`);
 
@@ -289,7 +288,7 @@ function pause(message){
 function resume(message){
     const voiceConnection = client.voice.connections.find(val => val.channel.guild.id == message.guild.id);
     if (voiceConnection === null || voiceConnection === void 0){
-        message.channel.send(wrap("There is no music playing"));
+        //message.channel.send(wrap("There is no music playing"));
     }
     else {
         const dispatcher = voiceConnection.dispatcher;
@@ -336,7 +335,7 @@ function volume(message, serverQueue){
     message.channel.send(wrap("Volume updated."));
 }
 async function helpMe(message){
-    message.channel.send(wrap("No."));
+    message.channel.send(wrap("Commands:\n!play <url or name of a song> - adds song to the playlist\n!pause  - pause the current song\n!resume - resume the current song\n!skip - skips current song\n!volume # - set the volume between 0 and 100"));
 }
 
 function trimPrefix(str, prefix) {
